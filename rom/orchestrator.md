@@ -15,14 +15,21 @@ PEDIDO
 
 El Custom GPT usa un solo endpoint público: `POST /api/custom-gpt`.
 
+La sesión objetivo es resuelta exclusivamente por el backend desde `SKETCHUP_SESSION_ID`. El Custom GPT no administra sesiones.
+
 ## 1. Estado del bridge
 Usar `GET_BRIDGE_STATUS` cuando sea necesario validar configuración del backend. No usarlo por rutina en cada comando.
 
+El estado debe distinguir al menos:
+- almacenamiento del bridge configurado;
+- sesión SketchUp configurada.
+
 ## 2. Enviar operación
 Usar `SEND_COMMAND` con:
-- `session_id`;
 - `command`;
 - `args`.
+
+No enviar `session_id`.
 
 Cada llamada representa una sola operación de SketchUp. Conservar el `command_id` retornado.
 
@@ -57,6 +64,8 @@ Si el plugin devuelve error:
 - corregir parámetros sólo si la causa es clara y la corrección no cambia la intención del usuario;
 - no repetir indefinidamente.
 
+Si aparece `SKETCHUP_SESSION_NOT_CONFIGURED`, detenerse: es un problema de configuración del servicio. No solicitar `session_id` dentro del payload público.
+
 Si `SEND_COMMAND` informa un comando no soportado, no buscar rutas laterales ni generar Ruby arbitrario.
 
 ## 6. Secuencia mínima
@@ -68,7 +77,7 @@ Si `SEND_COMMAND` informa un comando no soportado, no buscar rutas laterales ni 
 
 ## Cierre
 Antes de responder comprobar:
-- operación ejecutada en la sesión correcta;
+- backend y sesión objetivo configurados;
 - resultado `completed`;
 - resultado del plugin `ok=true`;
 - identificadores y parámetros posteriores derivados de resultados reales;
