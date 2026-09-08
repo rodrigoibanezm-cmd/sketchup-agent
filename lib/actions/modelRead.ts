@@ -26,7 +26,7 @@ export async function getModelSummary() {
       scenes: snapshot.scenes.length,
       selected: snapshot.selection.length
     },
-    top_level_entities: snapshot.entities.filter((entity) => entity.parent_id === null).slice(0, 100),
+    top_level_entities: snapshot.entities.filter((entity) => entity.parent_key === null).slice(0, 100),
     selection: snapshot.selection
   };
 }
@@ -62,32 +62,46 @@ export async function findEntities(input: FindEntitiesInput = {}) {
   };
 }
 
-export type GetEntityInput = { persistent_id?: number | string };
+export type GetEntityInput = {
+  entity_key?: string;
+  persistent_id?: number | string;
+};
+
+function resolveEntity(entities: ModelEntity[], input: GetEntityInput) {
+  const entityKey = String(input.entity_key || '').trim();
+  if (entityKey) {
+    const entity = entities.find((item) => item.entity_key === entityKey);
+    if (!entity) throw new Error('ENTITY_NOT_FOUND');
+    return entity;
+  }
+
+  const persistentId = Number(input.persistent_id);
+  if (!Number.isFinite(persistentId)) throw new Error('ENTITY_REFERENCE_REQUIRED');
+  const matches = entities.filter((item) => item.persistent_id === persistentId);
+  if (matches.length === 0) throw new Error('ENTITY_NOT_FOUND');
+  if (matches.length > 1) throw new Error('ENTITY_AMBIGUOUS_USE_ENTITY_KEY');
+  return matches[0];
+}
 
 export async function getEntity(input: GetEntityInput = {}) {
   const snapshot = await requireSnapshot();
-  const persistentId = Number(input.persistent_id);
-  if (!Number.isFinite(persistentId)) throw new Error('PERSISTENT_ID_REQUIRED');
-
-  const entity = snapshot.entities.find((item) => item.persistent_id === persistentId);
-  if (!entity) throw new Error('ENTITY_NOT_FOUND');
+  const entity = resolveEntity(snapshot.entities, input);
 
   return {
     snapshot_version: snapshot.snapshot_version,
     entity,
-    children_count: snapshot.entities.filter((item) => item.parent_id === persistentId).length
+    children_count: snapshot.entities.filter((item) => item.parent_key === entity.entity_key).length
   };
 }
 
 export async function getChildren(input: GetEntityInput = {}) {
   const snapshot = await requireSnapshot();
-  const persistentId = Number(input.persistent_id);
-  if (!Number.isFinite(persistentId)) throw new Error('PERSISTENT_ID_REQUIRED');
+  const entity = resolveEntity(snapshot.entities, input);
 
   return {
     snapshot_version: snapshot.snapshot_version,
-    parent_id: persistentId,
-    entities: snapshot.entities.filter((item) => item.parent_id === persistentId)
+    parent: entity,
+    entities: snapshot.entities.filter((item) => item.parent_key === entity.entity_key)
   };
 }
 
