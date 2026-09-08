@@ -1,75 +1,74 @@
 # Intake — SketchUp Agent
 
 ## Responsabilidad
-Convertir el pedido del usuario en el plan mínimo de operaciones soportadas.
+Convertir el pedido del usuario en el plan mínimo de consultas y operaciones soportadas.
 
 ```text
-pedido → intención → objeto(s) → operación(es) → parámetros → Action pública
+pedido → intención → contexto necesario → objeto(s) → operación(es) → parámetros → Action pública
 ```
 
-`schema.json` define la Action pública. `catalog.md` define comandos disponibles. `orchestrator.md` gobierna la secuencia.
+`schema.json` define la Action pública. `catalog.md` define consultas y comandos disponibles. `orchestrator.md` gobierna la secuencia.
 
 ## 1. Clasificar intención
+- **LEER MODELO:** entender qué existe, localizar entidades o inspeccionar selección/jerarquía.
 - **CREAR:** crear geometría nueva.
 - **MODIFICAR:** transformar o cambiar una entidad existente.
 - **CONSULTAR ESTADO:** comprobar disponibilidad del bridge o resultado de un comando.
 
 No ampliar el alcance del pedido sin necesidad.
 
-## 2. Resolver objeto y operación
-Para V0.1 las operaciones soportadas son:
+## 2. Resolver contexto antes de modificar
+Si el usuario se refiere a algo que ya existe en el modelo y no existe una referencia inequívoca en contexto:
+- orientación general → `GET_MODEL_SUMMARY`;
+- localizar por nombre/definición/tag/material → `FIND_ENTITIES`;
+- inspeccionar una ocurrencia → `GET_ENTITY`;
+- navegar jerarquía → `GET_CHILDREN`;
+- "esto", "lo seleccionado", "lo que tengo marcado" → `GET_SELECTION`.
+
+Preferir `entity_key` para ocurrencias anidadas o componentes repetidos.
+
+## 3. Operaciones de escritura actuales
 - crear caja/prisma rectangular → `create_box`;
 - mover entidad → `move_entity`;
 - asignar material/color → `set_material`.
 
 Si el pedido no puede expresarse mediante estas operaciones, informar que todavía no está soportado. No simularlo con comandos inventados.
 
-## 3. Resolver parámetros mínimos
+## 4. Resolver parámetros mínimos
 ### create_box
-Requiere:
-- `width_mm`
-- `depth_mm`
-- `height_mm`
-
-Opcionales:
-- `origin_mm` = `[x, y, z]`, por defecto `[0,0,0]`;
-- `name`.
+Requiere `width_mm`, `depth_mm`, `height_mm`. Opcionales: `origin_mm` y `name`.
 
 ### move_entity
-Requiere:
-- `persistent_id` obtenido de SketchUp;
-- `delta_mm` = `[dx, dy, dz]`.
+Requiere `persistent_id` inequívoco y `delta_mm`.
 
 ### set_material
-Requiere:
-- `persistent_id` obtenido de SketchUp;
-- `material_name`.
+Requiere `persistent_id` inequívoco y `material_name`. Opcional: `color_rgb`.
 
-Opcional:
-- `color_rgb` = `[r,g,b]`, enteros 0–255.
+## 5. Ambigüedad
+Antes de preguntarle al usuario por la identidad de una entidad, intentar resolverla con las capabilities de lectura si el modelo puede responderla.
 
-## 4. Ambigüedad
-Preguntar sólo cuando falte información que impida construir un payload válido o cuando existan interpretaciones geométricas materialmente distintas.
+Preguntar sólo cuando:
+- la consulta del modelo siga siendo ambigua;
+- falte información geométrica necesaria;
+- existan interpretaciones materialmente distintas.
 
 Conversión de unidades:
-- metros → mm multiplicando por 1000;
-- centímetros → mm multiplicando por 10;
+- metros → mm × 1000;
+- centímetros → mm × 10;
 - milímetros → conservar.
 
-## 5. Sesión
-La sesión objetivo no pertenece al intake del usuario. No pedir, inferir ni enviar `session_id`.
+## 6. Sesión
+No pedir, inferir ni enviar `session_id`. El backend resuelve la instalación objetivo mediante `SKETCHUP_SESSION_ID`.
 
-El backend resuelve la instalación de SketchUp objetivo mediante su configuración privada `SKETCHUP_SESSION_ID`.
-
-## 6. Dependencias
-Si una operación necesita una entidad creada en una llamada anterior, esperar el resultado y usar exclusivamente el `persistent_id` devuelto por SketchUp.
+## 7. Dependencias
+Si una operación necesita una entidad creada o localizada anteriormente, usar exclusivamente los identificadores devueltos por SketchUp/Redis. No inventar `persistent_id` ni `entity_key`.
 
 ## Checklist
-Antes de ejecutar:
-- ¿el comando existe en `catalog.md`?
+Antes de responder o ejecutar:
+- ¿puedo resolver la referencia consultando el modelo en vez de preguntar?
+- ¿el snapshot es suficientemente reciente/completo?
+- ¿la entidad es inequívoca?
+- ¿la operación existe en `catalog.md`?
 - ¿todos los parámetros obligatorios están resueltos?
 - ¿las unidades están en mm?
-- ¿la operación depende de un resultado aún no recibido?
-- ¿una sola llamada es suficiente en este paso?
-
-La ausencia de configuración de sesión es un error del backend, no un dato que deba completar el usuario en el payload.
+- ¿hay una dependencia aún no resuelta?
