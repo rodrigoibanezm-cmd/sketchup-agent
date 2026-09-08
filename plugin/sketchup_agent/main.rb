@@ -12,6 +12,7 @@ module RodrigoIbanezM
       POLL_SECONDS = 2.0
       SNAPSHOT_SECONDS = 10.0
       MAX_ENTITY_DEPTH = 12
+      MAX_CONTEXT_ENTITIES = 5000
 
       def start
         return if @timer
@@ -73,7 +74,8 @@ module RodrigoIbanezM
 
       def build_model_snapshot(model)
         entities = []
-        collect_entities(model.entities, nil, entities, 0)
+        state = { 'truncated' => false }
+        collect_entities(model.entities, nil, entities, 0, state)
 
         selection = model.selection.to_a.select { |entity| supported_context_entity?(entity) }.map(&:persistent_id)
         units_code = model.options['UnitsOptions']['LengthUnit'] rescue nil
@@ -82,6 +84,7 @@ module RodrigoIbanezM
           'session_id' => @session_id,
           'snapshot_version' => @snapshot_version,
           'captured_at' => Time.now.utc.iso8601,
+          'truncated' => state['truncated'],
           'model' => {
             'title' => model.title,
             'path' => model.path,
@@ -97,17 +100,24 @@ module RodrigoIbanezM
         }
       end
 
-      def collect_entities(collection, parent_key, output, depth)
-        return if depth > MAX_ENTITY_DEPTH
+      def collect_entities(collection, parent_key, output, depth, state)
+        if depth > MAX_ENTITY_DEPTH
+          state['truncated'] = true
+          return
+        end
 
         collection.each do |entity|
           next unless supported_context_entity?(entity)
+          if output.length >= MAX_CONTEXT_ENTITIES
+            state['truncated'] = true
+            return
+          end
 
           entity_key = parent_key ? "#{parent_key}/#{entity.persistent_id}" : entity.persistent_id.to_s
-          record = entity_record(entity, entity_key, parent_key)
-          output << record
+          output << entity_record(entity, entity_key, parent_key)
           child_collection = entity.is_a?(Sketchup::Group) ? entity.entities : entity.definition.entities
-          collect_entities(child_collection, entity_key, output, depth + 1)
+          collect_entities(child_collection, entity_key, output, depth + 1, state)
+          return if output.length >= MAX_CONTEXT_ENTITIES
         end
       end
 
