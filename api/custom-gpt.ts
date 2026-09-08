@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { listCustomGptActions, runCustomGptAction } from '../lib/custom-gpt-router.js';
 
-const ROUTER_VERSION = '0.1.0';
+const ROUTER_VERSION = '0.2.0';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -41,10 +41,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const message = error instanceof Error ? error.message : 'CUSTOM_GPT_REQUEST_FAILED';
     const clientErrors = new Set([
       'UNKNOWN_CUSTOM_GPT_ACTION',
-      'SESSION_ID_REQUIRED',
       'COMMAND_REQUIRED',
       'UNSUPPORTED_COMMAND',
-      'COMMAND_ID_REQUIRED'
+      'COMMAND_ID_REQUIRED',
+      'SKETCHUP_SESSION_NOT_CONFIGURED',
+      'COMMAND_RESULT_SESSION_MISMATCH'
     ]);
     return res.status(clientErrors.has(message) ? 400 : 500).json({
       ok: false,
