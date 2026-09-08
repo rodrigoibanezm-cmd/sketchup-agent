@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SketchUp Agent",
-    "version": "0.2.0",
-    "description": "Single-router API used by the SketchUp Agent Custom GPT. The target SketchUp session is private backend configuration and is never supplied by the GPT."
+    "version": "0.3.0",
+    "description": "Single-router API used by the SketchUp Agent Custom GPT. The target SketchUp session is private backend configuration. Model context is read from Redis snapshots published by the SketchUp plugin."
   },
   "servers": [
     {
@@ -36,12 +36,9 @@
               }
             }
           },
-          "400": {
-            "description": "Invalid action, input, session configuration, or command/result mismatch"
-          },
-          "500": {
-            "description": "Backend or bridge storage error"
-          }
+          "400": { "description": "Invalid action or input" },
+          "409": { "description": "Model snapshot is not available yet" },
+          "500": { "description": "Backend or bridge storage error" }
         }
       }
     }
@@ -50,15 +47,14 @@
     "schemas": {
       "RouterRequest": {
         "oneOf": [
-          {
-            "$ref": "#/components/schemas/SendCommandRequest"
-          },
-          {
-            "$ref": "#/components/schemas/GetCommandResultRequest"
-          },
-          {
-            "$ref": "#/components/schemas/GetBridgeStatusRequest"
-          }
+          { "$ref": "#/components/schemas/SendCommandRequest" },
+          { "$ref": "#/components/schemas/GetCommandResultRequest" },
+          { "$ref": "#/components/schemas/GetBridgeStatusRequest" },
+          { "$ref": "#/components/schemas/GetModelSummaryRequest" },
+          { "$ref": "#/components/schemas/FindEntitiesRequest" },
+          { "$ref": "#/components/schemas/GetEntityRequest" },
+          { "$ref": "#/components/schemas/GetChildrenRequest" },
+          { "$ref": "#/components/schemas/GetSelectionRequest" }
         ]
       },
       "SendCommandRequest": {
@@ -66,13 +62,8 @@
         "additionalProperties": false,
         "required": ["action", "input"],
         "properties": {
-          "action": {
-            "type": "string",
-            "const": "SEND_COMMAND"
-          },
-          "input": {
-            "$ref": "#/components/schemas/SendCommandInput"
-          }
+          "action": { "type": "string", "const": "SEND_COMMAND" },
+          "input": { "$ref": "#/components/schemas/SendCommandInput" }
         }
       },
       "SendCommandInput": {
@@ -96,19 +87,12 @@
         "additionalProperties": false,
         "required": ["action", "input"],
         "properties": {
-          "action": {
-            "type": "string",
-            "const": "GET_COMMAND_RESULT"
-          },
+          "action": { "type": "string", "const": "GET_COMMAND_RESULT" },
           "input": {
             "type": "object",
             "additionalProperties": false,
             "required": ["command_id"],
-            "properties": {
-              "command_id": {
-                "type": "string"
-              }
-            }
+            "properties": { "command_id": { "type": "string" } }
           }
         }
       },
@@ -117,14 +101,79 @@
         "additionalProperties": false,
         "required": ["action"],
         "properties": {
-          "action": {
-            "type": "string",
-            "const": "GET_BRIDGE_STATUS"
-          },
+          "action": { "type": "string", "const": "GET_BRIDGE_STATUS" },
+          "input": { "type": "object", "additionalProperties": false }
+        }
+      },
+      "GetModelSummaryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": { "type": "string", "const": "GET_MODEL_SUMMARY" },
+          "input": { "type": "object", "additionalProperties": false }
+        }
+      },
+      "FindEntitiesRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "input"],
+        "properties": {
+          "action": { "type": "string", "const": "FIND_ENTITIES" },
           "input": {
             "type": "object",
-            "additionalProperties": false
+            "additionalProperties": false,
+            "properties": {
+              "query": { "type": "string" },
+              "type": { "type": "string", "enum": ["group", "component_instance"] },
+              "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+            }
           }
+        }
+      },
+      "EntityReferenceInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "entity_key": {
+            "type": "string",
+            "description": "Occurrence-safe hierarchical key. Prefer this for nested/repeated components."
+          },
+          "persistent_id": {
+            "type": "integer",
+            "description": "SketchUp persistent_id. Accepted only when it resolves unambiguously in the snapshot."
+          }
+        },
+        "anyOf": [
+          { "required": ["entity_key"] },
+          { "required": ["persistent_id"] }
+        ]
+      },
+      "GetEntityRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "input"],
+        "properties": {
+          "action": { "type": "string", "const": "GET_ENTITY" },
+          "input": { "$ref": "#/components/schemas/EntityReferenceInput" }
+        }
+      },
+      "GetChildrenRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "input"],
+        "properties": {
+          "action": { "type": "string", "const": "GET_CHILDREN" },
+          "input": { "$ref": "#/components/schemas/EntityReferenceInput" }
+        }
+      },
+      "GetSelectionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": { "type": "string", "const": "GET_SELECTION" },
+          "input": { "type": "object", "additionalProperties": false }
         }
       },
       "RouterResponse": {
