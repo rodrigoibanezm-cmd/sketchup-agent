@@ -16,6 +16,7 @@ export async function getModelSummary() {
   return {
     snapshot_version: snapshot.snapshot_version,
     captured_at: snapshot.captured_at,
+    truncated: Boolean(snapshot.truncated),
     model: snapshot.model,
     counts: {
       entities: snapshot.entities.length,
@@ -57,6 +58,7 @@ export async function findEntities(input: FindEntitiesInput = {}) {
 
   return {
     snapshot_version: snapshot.snapshot_version,
+    truncated: Boolean(snapshot.truncated),
     total_matches: matches.length,
     entities: matches.slice(0, limit)
   };
@@ -89,6 +91,7 @@ export async function getEntity(input: GetEntityInput = {}) {
 
   return {
     snapshot_version: snapshot.snapshot_version,
+    truncated: Boolean(snapshot.truncated),
     entity,
     children_count: snapshot.entities.filter((item) => item.parent_key === entity.entity_key).length
   };
@@ -100,6 +103,7 @@ export async function getChildren(input: GetEntityInput = {}) {
 
   return {
     snapshot_version: snapshot.snapshot_version,
+    truncated: Boolean(snapshot.truncated),
     parent: entity,
     entities: snapshot.entities.filter((item) => item.parent_key === entity.entity_key)
   };
@@ -110,6 +114,7 @@ export async function getSelection() {
   const selected = new Set(snapshot.selection);
   return {
     snapshot_version: snapshot.snapshot_version,
+    truncated: Boolean(snapshot.truncated),
     persistent_ids: snapshot.selection,
     entities: snapshot.entities.filter((item) => selected.has(item.persistent_id))
   };
