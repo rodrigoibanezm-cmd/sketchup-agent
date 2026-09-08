@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SketchUp Agent",
-    "version": "0.1.0",
-    "description": "Single-router API used by the SketchUp Agent Custom GPT."
+    "version": "0.2.0",
+    "description": "Single-router API used by the SketchUp Agent Custom GPT. The target SketchUp session is private backend configuration and is never supplied by the GPT."
   },
   "servers": [
     {
@@ -20,18 +20,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": ["action"],
-                "properties": {
-                  "action": {
-                    "type": "string",
-                    "enum": ["SEND_COMMAND", "GET_COMMAND_RESULT", "GET_BRIDGE_STATUS"]
-                  },
-                  "input": {
-                    "type": "object",
-                    "additionalProperties": true
-                  }
-                }
+                "$ref": "#/components/schemas/RouterRequest"
               }
             }
           }
@@ -48,7 +37,7 @@
             }
           },
           "400": {
-            "description": "Invalid action or input"
+            "description": "Invalid action, input, session configuration, or command/result mismatch"
           },
           "500": {
             "description": "Backend or bridge storage error"
@@ -59,6 +48,85 @@
   },
   "components": {
     "schemas": {
+      "RouterRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SendCommandRequest"
+          },
+          {
+            "$ref": "#/components/schemas/GetCommandResultRequest"
+          },
+          {
+            "$ref": "#/components/schemas/GetBridgeStatusRequest"
+          }
+        ]
+      },
+      "SendCommandRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "input"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "SEND_COMMAND"
+          },
+          "input": {
+            "$ref": "#/components/schemas/SendCommandInput"
+          }
+        }
+      },
+      "SendCommandInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "args"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": ["create_box", "move_entity", "set_material"]
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Command-specific arguments. Geometric dimensions and offsets use millimeters."
+          }
+        }
+      },
+      "GetCommandResultRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "input"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "GET_COMMAND_RESULT"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command_id"],
+            "properties": {
+              "command_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "GetBridgeStatusRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "GET_BRIDGE_STATUS"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      },
       "RouterResponse": {
         "type": "object",
         "properties": {
