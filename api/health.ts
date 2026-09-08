@@ -6,7 +6,7 @@ export default function handler(_req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
     ok: true,
     service: 'sketchup-agent',
-    version: '0.2.0',
+    version: '0.3.0',
     bridge_storage: redisConfigured() ? 'configured' : 'not_configured',
     sketchup_session: sketchupSessionConfigured() ? 'configured' : 'not_configured'
   });
