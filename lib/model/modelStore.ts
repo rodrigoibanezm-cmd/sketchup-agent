@@ -18,6 +18,7 @@ export type ModelSnapshot = {
   session_id: string;
   snapshot_version: number;
   captured_at: string;
+  truncated?: boolean;
   model: {
     title?: string;
     path?: string;
