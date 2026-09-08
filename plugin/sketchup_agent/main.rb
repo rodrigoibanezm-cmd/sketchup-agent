@@ -1,6 +1,7 @@
 require 'json'
 require 'net/http'
 require 'uri'
+require 'time'
 
 module RodrigoIbanezM
   module SketchupAgent
@@ -96,16 +97,17 @@ module RodrigoIbanezM
         }
       end
 
-      def collect_entities(collection, parent_id, output, depth)
+      def collect_entities(collection, parent_key, output, depth)
         return if depth > MAX_ENTITY_DEPTH
 
         collection.each do |entity|
           next unless supported_context_entity?(entity)
 
-          record = entity_record(entity, parent_id)
+          entity_key = parent_key ? "#{parent_key}/#{entity.persistent_id}" : entity.persistent_id.to_s
+          record = entity_record(entity, entity_key, parent_key)
           output << record
           child_collection = entity.is_a?(Sketchup::Group) ? entity.entities : entity.definition.entities
-          collect_entities(child_collection, entity.persistent_id, output, depth + 1)
+          collect_entities(child_collection, entity_key, output, depth + 1)
         end
       end
 
@@ -113,15 +115,17 @@ module RodrigoIbanezM
         entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
       end
 
-      def entity_record(entity, parent_id)
+      def entity_record(entity, entity_key, parent_key)
         bounds = entity.bounds
         record = {
+          'entity_key' => entity_key,
+          'parent_key' => parent_key,
           'persistent_id' => entity.persistent_id,
-          'parent_id' => parent_id,
           'type' => entity.is_a?(Sketchup::Group) ? 'group' : 'component_instance',
           'name' => entity.name.to_s,
           'tag' => entity.layer ? entity.layer.name : nil,
           'material' => entity.material ? entity.material.name : nil,
+          'coordinate_space' => 'parent',
           'bbox_mm' => [
             mm_number(bounds.min.x), mm_number(bounds.min.y), mm_number(bounds.min.z),
             mm_number(bounds.max.x), mm_number(bounds.max.y), mm_number(bounds.max.z)
