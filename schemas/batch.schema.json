@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sketchup-agent/schemas/batch.schema.json",
+  "title": "SketchUp Action Batch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_id", "actions"],
+  "properties": {
+    "batch_id": { "type": "string", "minLength": 1 },
+    "atomic": { "type": "boolean", "default": true },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "op", "args"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "op": {
+            "type": "string",
+            "enum": [
+              "create_group",
+              "create_face",
+              "push_pull",
+              "move",
+              "rotate",
+              "scale",
+              "set_material",
+              "create_component",
+              "delete",
+              "inspect_selection"
+            ]
+          },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}
