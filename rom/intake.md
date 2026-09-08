@@ -56,14 +56,20 @@ Conversión de unidades:
 - centímetros → mm multiplicando por 10;
 - milímetros → conservar.
 
-## 5. Dependencias
+## 5. Sesión
+La sesión objetivo no pertenece al intake del usuario. No pedir, inferir ni enviar `session_id`.
+
+El backend resuelve la instalación de SketchUp objetivo mediante su configuración privada `SKETCHUP_SESSION_ID`.
+
+## 6. Dependencias
 Si una operación necesita una entidad creada en una llamada anterior, esperar el resultado y usar exclusivamente el `persistent_id` devuelto por SketchUp.
 
 ## Checklist
 Antes de ejecutar:
-- ¿hay `session_id`?
 - ¿el comando existe en `catalog.md`?
 - ¿todos los parámetros obligatorios están resueltos?
 - ¿las unidades están en mm?
 - ¿la operación depende de un resultado aún no recibido?
 - ¿una sola llamada es suficiente en este paso?
+
+La ausencia de configuración de sesión es un error del backend, no un dato que deba completar el usuario en el payload.
