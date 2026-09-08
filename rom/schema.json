@@ -1,0 +1,79 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SketchUp Agent",
+    "version": "0.1.0",
+    "description": "Single-router API used by the SketchUp Agent Custom GPT."
+  },
+  "servers": [
+    {
+      "url": "https://sketchup-agent-tau.vercel.app"
+    }
+  ],
+  "paths": {
+    "/api/custom-gpt": {
+      "post": {
+        "operationId": "runSketchupAgentAction",
+        "summary": "Run one SketchUp Agent action through the single public router",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["action"],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": ["SEND_COMMAND", "GET_COMMAND_RESULT", "GET_BRIDGE_STATUS"]
+                  },
+                  "input": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Action executed by the router",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action or input"
+          },
+          "500": {
+            "description": "Backend or bridge storage error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RouterResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "router_version": { "type": "string" },
+          "endpoint": { "type": "string" },
+          "action": { "type": "string" },
+          "result": {},
+          "error": { "type": "string" },
+          "allowedActions": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
