@@ -9,6 +9,8 @@ module RodrigoIbanezM
 
       DEFAULT_BASE_URL = 'https://sketchup-agent-tau.vercel.app'.freeze
       POLL_SECONDS = 2.0
+      SNAPSHOT_SECONDS = 10.0
+      MAX_ENTITY_DEPTH = 12
 
       def start
         return if @timer
@@ -16,7 +18,10 @@ module RodrigoIbanezM
         @session_id = Sketchup.read_default('SketchupAgent', 'session_id', nil)
         @session_id ||= "su-#{Time.now.to_i}-#{rand(100000..999999)}"
         Sketchup.write_default('SketchupAgent', 'session_id', @session_id)
+        @snapshot_version = 0
+        @last_snapshot_at = nil
         @timer = UI.start_timer(POLL_SECONDS, true) { poll_once }
+        post_model_snapshot
         UI.messagebox("SketchUp Agent conectado.\nSession: #{@session_id}")
       end
 
@@ -27,6 +32,8 @@ module RodrigoIbanezM
       end
 
       def poll_once
+        maybe_post_model_snapshot
+
         uri = URI("#{@base_url}/api/commands?session_id=#{URI.encode_www_form_component(@session_id)}")
         response = Net::HTTP.get_response(uri)
         return unless response.is_a?(Net::HTTPSuccess)
@@ -37,8 +44,117 @@ module RodrigoIbanezM
 
         result = execute(command)
         post_result(command['command_id'], result)
+        post_model_snapshot if result['ok']
       rescue => e
         puts("SketchUp Agent poll error: #{e.class}: #{e.message}")
+      end
+
+      def maybe_post_model_snapshot
+        return post_model_snapshot unless @last_snapshot_at
+        post_model_snapshot if (Time.now - @last_snapshot_at) >= SNAPSHOT_SECONDS
+      end
+
+      def post_model_snapshot
+        model = Sketchup.active_model
+        @snapshot_version = (@snapshot_version || 0) + 1
+        snapshot = build_model_snapshot(model)
+
+        uri = URI("#{@base_url}/api/model-state")
+        request = Net::HTTP::Post.new(uri)
+        request['Content-Type'] = 'application/json'
+        request.body = JSON.generate(snapshot)
+        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(request) }
+        raise "Model snapshot HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+        @last_snapshot_at = Time.now
+      rescue => e
+        puts("SketchUp Agent snapshot error: #{e.class}: #{e.message}")
+      end
+
+      def build_model_snapshot(model)
+        entities = []
+        collect_entities(model.entities, nil, entities, 0)
+
+        selection = model.selection.to_a.select { |entity| supported_context_entity?(entity) }.map(&:persistent_id)
+        units_code = model.options['UnitsOptions']['LengthUnit'] rescue nil
+
+        {
+          'session_id' => @session_id,
+          'snapshot_version' => @snapshot_version,
+          'captured_at' => Time.now.utc.iso8601,
+          'model' => {
+            'title' => model.title,
+            'path' => model.path,
+            'guid' => safe_model_guid(model),
+            'modified' => model.modified?,
+            'units' => unit_name(units_code)
+          },
+          'selection' => selection,
+          'entities' => entities,
+          'materials' => model.materials.map(&:name),
+          'tags' => model.layers.map(&:name),
+          'scenes' => model.pages.map { |page| { 'name' => page.name } }
+        }
+      end
+
+      def collect_entities(collection, parent_id, output, depth)
+        return if depth > MAX_ENTITY_DEPTH
+
+        collection.each do |entity|
+          next unless supported_context_entity?(entity)
+
+          record = entity_record(entity, parent_id)
+          output << record
+          child_collection = entity.is_a?(Sketchup::Group) ? entity.entities : entity.definition.entities
+          collect_entities(child_collection, entity.persistent_id, output, depth + 1)
+        end
+      end
+
+      def supported_context_entity?(entity)
+        entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
+      end
+
+      def entity_record(entity, parent_id)
+        bounds = entity.bounds
+        record = {
+          'persistent_id' => entity.persistent_id,
+          'parent_id' => parent_id,
+          'type' => entity.is_a?(Sketchup::Group) ? 'group' : 'component_instance',
+          'name' => entity.name.to_s,
+          'tag' => entity.layer ? entity.layer.name : nil,
+          'material' => entity.material ? entity.material.name : nil,
+          'bbox_mm' => [
+            mm_number(bounds.min.x), mm_number(bounds.min.y), mm_number(bounds.min.z),
+            mm_number(bounds.max.x), mm_number(bounds.max.y), mm_number(bounds.max.z)
+          ],
+          'transform' => transformation_payload(entity.transformation)
+        }
+        record['definition_name'] = entity.definition.name.to_s if entity.is_a?(Sketchup::ComponentInstance)
+        record
+      end
+
+      def transformation_payload(transformation)
+        values = transformation.to_a.map(&:to_f)
+        values[12] = mm_number(values[12])
+        values[13] = mm_number(values[13])
+        values[14] = mm_number(values[14])
+        values
+      end
+
+      def safe_model_guid(model)
+        model.respond_to?(:guid) ? model.guid : nil
+      rescue
+        nil
+      end
+
+      def unit_name(code)
+        {
+          0 => 'inches',
+          1 => 'feet',
+          2 => 'millimeters',
+          3 => 'centimeters',
+          4 => 'meters',
+          5 => 'yards'
+        }[code] || 'unknown'
       end
 
       def execute(command)
@@ -117,6 +233,10 @@ module RodrigoIbanezM
 
       def mm(value)
         Float(value).mm
+      end
+
+      def mm_number(value)
+        (Float(value) * 25.4).round(4)
       end
     end
 
