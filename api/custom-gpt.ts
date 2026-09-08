@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { listCustomGptActions, runCustomGptAction } from '../lib/custom-gpt-router.js';
 
-const ROUTER_VERSION = '0.2.0';
+const ROUTER_VERSION = '0.3.0';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -45,9 +45,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       'UNSUPPORTED_COMMAND',
       'COMMAND_ID_REQUIRED',
       'SKETCHUP_SESSION_NOT_CONFIGURED',
-      'COMMAND_RESULT_SESSION_MISMATCH'
+      'COMMAND_RESULT_SESSION_MISMATCH',
+      'ENTITY_REFERENCE_REQUIRED',
+      'ENTITY_NOT_FOUND',
+      'ENTITY_AMBIGUOUS_USE_ENTITY_KEY'
     ]);
-    return res.status(clientErrors.has(message) ? 400 : 500).json({
+    const status = message === 'MODEL_SNAPSHOT_NOT_AVAILABLE' ? 409 : (clientErrors.has(message) ? 400 : 500);
+    return res.status(status).json({
       ok: false,
       router_version: ROUTER_VERSION,
       endpoint: 'custom-gpt',
