@@ -1,84 +1,95 @@
 # Orquestador — SketchUp Agent
 
 ## Propósito
-Transformar la intención resuelta por `intake.md` en la secuencia mínima de Actions públicas.
+Transformar la intención resuelta por `intake.md` en la secuencia mínima de Actions públicas, leyendo primero el modelo cuando la operación depende de contexto existente.
 
 ## Principio arquitectónico
 ```text
 PEDIDO
-→ INTENCIÓN
+→ CONTEXTO NECESARIO
+→ MODEL READ si corresponde
 → OPERACIÓN SOPORTADA
 → SEND_COMMAND
 → GET_COMMAND_RESULT
-→ siguiente operación sólo si depende del resultado anterior
+→ siguiente paso sólo si depende de evidencia real anterior
 ```
 
 El Custom GPT usa un solo endpoint público: `POST /api/custom-gpt`.
 
-La sesión objetivo es resuelta exclusivamente por el backend desde `SKETCHUP_SESSION_ID`. El Custom GPT no administra sesiones.
+La sesión objetivo es resuelta exclusivamente por el backend desde `SKETCHUP_SESSION_ID`.
 
-## 1. Estado del bridge
-Usar `GET_BRIDGE_STATUS` cuando sea necesario validar configuración del backend. No usarlo por rutina en cada comando.
+## 1. Estado y frescura
+Usar `GET_BRIDGE_STATUS` cuando sea necesario validar disponibilidad. Si existe `model_state`, considerar `plugin_online`, `captured_at` y `age_seconds` antes de basar una modificación en ese snapshot.
 
-El estado debe distinguir al menos:
-- almacenamiento del bridge configurado;
-- sesión SketchUp configurada.
+## 2. Lectura progresiva del modelo
+No pedir contexto masivo sin necesidad.
 
-## 2. Enviar operación
-Usar `SEND_COMMAND` con:
-- `command`;
-- `args`.
+Secuencia recomendada:
+- orientación general → `GET_MODEL_SUMMARY`;
+- localizar objeto → `FIND_ENTITIES`;
+- detalle de ocurrencia → `GET_ENTITY`;
+- jerarquía → `GET_CHILDREN`;
+- referencia de interfaz → `GET_SELECTION`.
 
-No enviar `session_id`.
+Si una respuesta tiene `truncated=true`, no asumir que una ausencia significa que la entidad no existe en el modelo completo.
 
-Cada llamada representa una sola operación de SketchUp. Conservar el `command_id` retornado.
+`entity_key` es la referencia preferida para navegación en componentes repetidos o anidados. `persistent_id` puede usarse si el backend lo resuelve de forma inequívoca.
 
-## 3. Esperar resultado
+## 3. Enviar operación
+Usar `SEND_COMMAND` con `command` y `args`. No enviar `session_id`.
+
+Cada llamada representa una sola operación de SketchUp. Conservar `command_id`.
+
+## 4. Esperar resultado
 Usar `GET_COMMAND_RESULT` con el `command_id` retornado.
 
 Estados:
-- `pending`: SketchUp aún no reporta resultado; volver a consultar después.
+- `pending`: SketchUp aún no reporta resultado;
 - `completed`: existe respuesta del plugin; inspeccionar el resultado interno.
 
-No interpretar `status=completed` como éxito geométrico por sí solo. El resultado reportado por el plugin debe indicar `ok=true`.
+No interpretar `completed` como éxito geométrico por sí solo. El plugin debe indicar `ok=true`.
 
-## 4. Dependencias
-Las operaciones dependientes son estrictamente secuenciales.
+## 5. Dependencias
+Las dependencias son estrictamente secuenciales.
 
-Ejemplo:
+Ejemplo sobre modelo existente:
+```text
+FIND_ENTITIES "mesón"
+→ GET_ENTITY entity_key correcto
+→ resolver persistent_id inequívoco
+→ SEND_COMMAND set_material
+→ GET_COMMAND_RESULT
+→ completed + plugin ok
+```
+
+Ejemplo de creación:
 ```text
 create_box
 → completed + plugin ok
-→ obtener persistent_id
-→ set_material usando persistent_id
-→ completed + plugin ok
-→ move_entity usando persistent_id
+→ persistent_id real
+→ siguiente modificación
 ```
 
-No inventar ni anticipar `persistent_id`.
+No inventar identificadores.
 
-## 5. Fallos
-Si el plugin devuelve error:
-- detener la cadena dependiente;
-- informar el error útil;
-- corregir parámetros sólo si la causa es clara y la corrección no cambia la intención del usuario;
-- no repetir indefinidamente.
+## 6. Fallos
+- `MODEL_SNAPSHOT_NOT_AVAILABLE`: el plugin aún no publicó contexto; no inventar estado del modelo.
+- `ENTITY_AMBIGUOUS_USE_ENTITY_KEY`: repetir la consulta usando `entity_key`.
+- `ENTITY_NOT_FOUND`: ampliar/buscar de otra forma antes de concluir ausencia si el snapshot está truncado.
+- `SKETCHUP_SESSION_NOT_CONFIGURED`: error de configuración del servicio; no pedir session_id al usuario.
+- error del plugin: detener cadena dependiente e informar la causa útil.
 
-Si aparece `SKETCHUP_SESSION_NOT_CONFIGURED`, detenerse: es un problema de configuración del servicio. No solicitar `session_id` dentro del payload público.
-
-Si `SEND_COMMAND` informa un comando no soportado, no buscar rutas laterales ni generar Ruby arbitrario.
-
-## 6. Secuencia mínima
-- una operación por comando;
+## 7. Secuencia mínima
+- consulta sólo lo necesario;
+- una operación de escritura por comando;
 - una dependencia a la vez;
-- reutilizar resultados ya recibidos;
-- no consultar resultados de comandos que no fueron enviados;
-- detenerse cuando la intención del usuario esté cumplida.
+- reutilizar evidencia ya recibida del mismo snapshot si sigue vigente;
+- detenerse cuando la intención esté cumplida.
 
 ## Cierre
 Antes de responder comprobar:
-- backend y sesión objetivo configurados;
-- resultado `completed`;
-- resultado del plugin `ok=true`;
-- identificadores y parámetros posteriores derivados de resultados reales;
-- ninguna operación adicional necesaria para cumplir el pedido.
+- contexto real cuando el pedido depende de un modelo existente;
+- snapshot suficientemente vigente y no interpretado más allá de su cobertura;
+- entidad inequívoca;
+- resultado `completed` y plugin `ok=true` para cualquier cambio afirmado;
+- ninguna operación adicional necesaria.
