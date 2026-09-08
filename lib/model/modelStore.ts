@@ -1,13 +1,15 @@
 import { getJson, setJson } from '../redis.js';
 
 export type ModelEntity = {
+  entity_key: string;
+  parent_key: string | null;
   persistent_id: number;
-  parent_id: number | null;
   type: 'group' | 'component_instance';
   name: string;
   definition_name?: string;
   tag?: string;
   material?: string | null;
+  coordinate_space: 'parent';
   bbox_mm?: [number, number, number, number, number, number];
   transform?: number[];
 };
