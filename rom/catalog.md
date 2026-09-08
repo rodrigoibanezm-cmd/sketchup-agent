@@ -14,6 +14,15 @@ Acciones públicas:
 
 Los endpoints del bridge usados por el plugin son internos a la arquitectura y no forman parte de la superficie del Custom GPT.
 
+## Sesión objetivo
+La instalación de SketchUp objetivo se configura en el backend mediante:
+
+```text
+SKETCHUP_SESSION_ID
+```
+
+`session_id` no forma parte del contrato público del Custom GPT. El agente no debe pedirlo ni enviarlo. El backend lo resuelve antes de escribir el comando en el bridge store.
+
 ## Comandos SketchUp V0.1
 
 ### create_box
@@ -69,9 +78,6 @@ Input `args`:
 
 ## Unidades
 Los payloads geométricos usan milímetros.
-
-## Sesión
-`session_id` identifica una instalación activa del plugin SketchUp Agent. Un comando se envía a una única sesión.
 
 ## Límites V0.1
 No están soportados todavía:
